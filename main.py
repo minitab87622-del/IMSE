@@ -1,11 +1,30 @@
 import json
 import os
-import tkinter as tk
-from tkinter import messagebox, ttk
+import arabic_reshaper
+from bidi.algorithm import get_display
 
-# ---------------------------------------------------------
-# 1. الخطة الدراسية مع عدد الساعات المعتمدة لكل مادة
-# ---------------------------------------------------------
+from kivy.app import App
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.button import Button
+from kivy.uix.gridlayout import GridLayout
+from kivy.uix.label import Label
+from kivy.uix.popup import Popup
+from kivy.uix.scrollview import ScrollView
+from kivy.uix.screenmanager import Screen, ScreenManager
+from kivy.uix.textinput import TextInput
+
+FONT_NAME = "font.ttf"
+
+
+# دالة معالجة النص العربي لمنع المربعات وتوصيل الحروف
+def ar(text):
+    if not text:
+        return ""
+    reshaped_text = arabic_reshaper.reshape(str(text))
+    return get_display(reshaped_text)
+
+
+# الخطة الدراسية الكاملة - هندسة صناعية ونظم التصنيع
 CURRICULUM = {
     "المستوى الأول": {
         "الفصل الأول": [
@@ -35,7 +54,7 @@ CURRICULUM = {
             {"name": "مبادئ هندسة كهربائية والكترونية", "hours": 4},
             {"name": "علم المواد", "hours": 3},
             {"name": "استاتيكا", "hours": 3},
-            {"name": "التصميم بمساعدة الحاسوب (CAD)", "hours": 3},
+            {"name": "التصميم بمساعدة الحاسوب CAD", "hours": 3},
         ],
         "الفصل الثاني": [
             {"name": "تحليل عددي", "hours": 3},
@@ -70,7 +89,7 @@ CURRICULUM = {
             {"name": "إدارة الجودة الشاملة", "hours": 3},
             {"name": "تصميم أنظمة التحكم", "hours": 4},
             {"name": "قياسات وأدوات قياس", "hours": 3},
-            {"name": "التصنيع بمساعدة الحاسوب (CAM)", "hours": 4},
+            {"name": "التصنيع بمساعدة الحاسوب CAM", "hours": 4},
             {"name": "أنظمة النمذجة والمحاكاة", "hours": 3},
             {"name": "إدارة مشاريع هندسية", "hours": 3},
         ],
@@ -100,415 +119,376 @@ CURRICULUM = {
 }
 
 
-class AcademicGPACalculator:
+class DataManager:
 
-    def __init__(self, root):
-        self.root = root
-        self.root.title("نظام حساب المعدل الأكاديمي - الهندسة الصناعية")
-        self.root.geometry("550x650")
-        self.root.configure(bg="#f4f6f9")
-
-        # بيانات الطالب المحفوظة
+    def __init__(self):
         self.student_name = ""
-        self.grades_data = {}
+        self.grades = {}
 
-        # الحالة الحالية للملاحة
-        self.selected_level = None
-        self.selected_term = None
-        self.entries = {}
+    def save_to_file(self):
+        if not self.student_name:
+            return False, "يرجى إدخال اسم الطالب أولاً"
+        filename = f"{self.student_name}_gpa.json"
+        try:
+            with open(filename, "w", encoding="utf-8") as f:
+                json.dump(self.grades, f, ensure_ascii=False, indent=4)
+            return True, f"تم حفظ البيانات في {filename}"
+        except Exception as e:
+            return False, str(e)
 
-        self.setup_main_frame()
-        self.show_screen_1()
+    def load_from_file(self, name):
+        filename = f"{name}_gpa.json"
+        if not os.path.exists(filename):
+            return False, "الملف غير موجود"
+        try:
+            with open(filename, "r", encoding="utf-8") as f:
+                self.grades = json.load(f)
+            self.student_name = name
+            return True, "تم تحميل البيانات بنجاح"
+        except Exception as e:
+            return False, str(e)
 
-    def setup_main_frame(self):
-        # الهيكل العام للواجهة
-        self.header_frame = tk.Frame(self.root, bg="#1e293b", py=10)
-        self.header_frame.pack(fill="x")
-
-        self.title_label = tk.Label(
-            self.header_frame,
-            text="حاسبة المعدل الأكاديمي",
-            fg="white",
-            bg="#1e293b",
-            font=("Arial", 16, "bold"),
-        )
-        self.title_label.pack()
-
-        # إدخال اسم الشخص
-        self.profile_frame = tk.Frame(self.root, bg="#f4f6f9", py=5)
-        self.profile_frame.pack(fill="x", px=15)
-
-        tk.Label(
-            self.profile_frame,
-            text="اسم الطالب:",
-            font=("Arial", 11),
-            bg="#f4f6f9",
-        ).pack(side="right")
-        self.name_entry = tk.Entry(
-            self.profile_frame, font=("Arial", 11), width=20
-        )
-        self.name_entry.pack(side="right", px=5)
-
-        tk.Button(
-            self.profile_frame,
-            text="حفظ البيانات",
-            bg="#10b981",
-            fg="white",
-            command=self.save_data,
-        ).pack(side="left", px=2)
-        tk.Button(
-            self.profile_frame,
-            text="تحميل البيانات",
-            bg="#3b82f6",
-            fg="white",
-            command=self.load_data,
-        ).pack(side="left", px=2)
-
-        self.container = tk.Frame(self.root, bg="#f4f6f9")
-        self.container.pack(fill="both", expand=True, px=20, py=10)
-
-    def clear_container(self):
-        for widget in self.container.winfo_children():
-            widget.destroy()
-
-    # ---------------------------------------------------------
-    # الشاشة الأولى: اختيار المستوى + المعدل التراكمي الكلي
-    # ---------------------------------------------------------
-    def show_screen_1(self):
-        self.clear_container()
-
-        tk.Label(
-            self.container,
-            text="اختر المستوى الدراسي:",
-            font=("Arial", 14, "bold"),
-            bg="#f4f6f9",
-        ).pack(py=10)
-
-        for level in CURRICULUM.keys():
-            btn = tk.Button(
-                self.container,
-                text=level,
-                font=("Arial", 12),
-                bg="#ffffff",
-                fg="#1e293b",
-                height=2,
-                relief="groove",
-                command=lambda l=level: self.select_level(l),
-            )
-            btn.pack(fill="x", py=5)
-
-        # عرض المعدل التراكمي لجميع السنين
-        overall_gpa, total_hrs = self.calculate_overall_gpa()
-        gpa_card = tk.Frame(
-            self.container,
-            bg="#e2e8f0",
-            py=15,
-            highlightbackground="#cbd5e1",
-            highlightthickness=1,
-        )
-        gpa_card.pack(fill="x", side="bottom", py=15)
-
-        tk.Label(
-            gpa_card,
-            text=f"المعدل التراكمي الكلي لجميع السنين: {overall_gpa:.2f}%",
-            font=("Arial", 13, "bold"),
-            bg="#e2e8f0",
-            fg="#0f172a",
-        ).pack()
-        tk.Label(
-            gpa_card,
-            text=f"إجمالي الساعات المكتسبة: {total_hrs} ساعة",
-            font=("Arial", 10),
-            bg="#e2e8f0",
-            fg="#475569",
-        ).pack()
-
-    def select_level(self, level):
-        self.selected_level = level
-        self.show_screen_2()
-
-    # ---------------------------------------------------------
-    # الشاشة الثانية: اختيار الترم + معدل السنة
-    # ---------------------------------------------------------
-    def show_screen_2(self):
-        self.clear_container()
-
-        tk.Label(
-            self.container,
-            text=f"{self.selected_level} - اختر الترم:",
-            font=("Arial", 14, "bold"),
-            bg="#f4f6f9",
-        ).pack(py=10)
-
-        for term in CURRICULUM[self.selected_level].keys():
-            btn = tk.Button(
-                self.container,
-                text=term,
-                font=("Arial", 12),
-                bg="#ffffff",
-                fg="#1e293b",
-                height=2,
-                relief="groove",
-                command=lambda t=term: self.select_term(t),
-            )
-            btn.pack(fill="x", py=8)
-
-        # عرض معدل السنة المختارة
-        year_gpa, year_hrs = self.calculate_year_gpa(self.selected_level)
-        year_card = tk.Frame(
-            self.container,
-            bg="#e2e8f0",
-            py=15,
-            highlightbackground="#cbd5e1",
-            highlightthickness=1,
-        )
-        year_card.pack(fill="x", side="bottom", py=15)
-
-        tk.Label(
-            year_card,
-            text=f"معدل {self.selected_level}: {year_gpa:.2f}%",
-            font=("Arial", 13, "bold"),
-            bg="#e2e8f0",
-            fg="#0f172a",
-        ).pack()
-        tk.Label(
-            year_card,
-            text=f"ساعات السنة: {year_hrs} ساعة",
-            font=("Arial", 10),
-            bg="#e2e8f0",
-            fg="#475569",
-        ).pack()
-
-        # زر الرجوع
-        tk.Button(
-            self.container,
-            text="← رجوع للقائمة الرئيسية",
-            bg="#64748b",
-            fg="white",
-            command=self.show_screen_1,
-        ).pack(side="bottom", anchor="w", py=5)
-
-    def select_term(self, term):
-        self.selected_term = term
-        self.show_screen_3()
-
-    # ---------------------------------------------------------
-    # الشاشة الثالثة: إدخال درجات المواد وحساب معدل الترم
-    # ---------------------------------------------------------
-    def show_screen_3(self):
-        self.clear_container()
-
-        tk.Label(
-            self.container,
-            text=f"{self.selected_level} - {self.selected_term}",
-            font=("Arial", 13, "bold"),
-            bg="#f4f6f9",
-        ).pack(py=5)
-        tk.Label(
-            self.container,
-            text="أدخل الدرجة (من 100) مقابل كل مادة:",
-            font=("Arial", 10),
-            bg="#f4f6f9",
-            fg="#64748b",
-        ).pack(py=2)
-
-        scroll_frame = tk.Frame(self.container, bg="#f4f6f9")
-        scroll_frame.pack(fill="both", expand=True, py=5)
-
-        self.entries = {}
-        courses = CURRICULUM[self.selected_level][self.selected_term]
-
-        for course in courses:
-            row = tk.Frame(scroll_frame, bg="#ffffff", py=5, px=5)
-            row.pack(fill="x", py=3)
-
-            lbl_text = f"{course['name']} ({course['hours']} س)"
-            tk.Label(
-                row,
-                text=lbl_text,
-                font=("Arial", 10),
-                bg="#ffffff",
-                anchor="e",
-            ).pack(side="right", fill="x", expand=True)
-
-            ent = tk.Entry(row, font=("Arial", 10), width=8, justify="center")
-            ent.pack(side="left", px=5)
-
-            # ملء الدرجة المسبقة إن وجدت
-            existing_grade = (
-                self.grades_data.get(self.selected_level, {})
-                .get(self.selected_term, {})
-                .get(course["name"], "")
-            )
-            if existing_grade != "":
-                ent.insert(0, str(existing_grade))
-
-            self.entries[course["name"]] = (ent, course["hours"])
-
-        # زر الحساب
-        tk.Button(
-            self.container,
-            text="احسب معدل الترم",
-            bg="#2563eb",
-            fg="white",
-            font=("Arial", 11, "bold"),
-            command=self.process_term_calculation,
-        ).pack(fill="x", py=8)
-
-        # بطاقة النتيجة
-        self.term_result_label = tk.Label(
-            self.container,
-            text="معدل الترم: -- %",
-            font=("Arial", 12, "bold"),
-            bg="#f4f6f9",
-            fg="#1e293b",
-        )
-        self.term_result_label.pack(py=2)
-
-        # حساب النتيجة الحالية إن كانت مدخلة
-        self.update_term_label()
-
-        # زر الرجوع للترمات
-        tk.Button(
-            self.container,
-            text="← رجوع لقائمة الفصل",
-            bg="#64748b",
-            fg="white",
-            command=self.show_screen_2,
-        ).pack(side="bottom", anchor="w", py=5)
-
-    def process_term_calculation(self):
-        term_grades = {}
-        for cname, (ent, hrs) in self.entries.items():
-            val = ent.get().strip()
-            if val != "":
-                try:
-                    score = float(val)
-                    if 0 <= score <= 100:
-                        term_grades[cname] = score
-                    else:
-                        messagebox.showwarning(
-                            "خطأ", f"الدرجة للمادة {cname} يجب أن تكون بين 0 و 100"
-                        )
-                        return
-                except ValueError:
-                    messagebox.showerror(
-                        "خطأ", f"قيمة غير صحيحة للمادة {cname}"
-                    )
-                    return
-
-        # حفظ الدرجات الحالية في الذاكرة
-        if self.selected_level not in self.grades_data:
-            self.grades_data[self.selected_level] = {}
-        self.grades_data[self.selected_level][
-            self.selected_term
-        ] = term_grades
-
-        self.update_term_label()
-        messagebox.showinfo("تم الحساب", "تم حساب وتحديث درجات الترم بنجاح!")
-
-    def update_term_label(self):
-        gpa, hrs = self.calculate_term_gpa(
-            self.selected_level, self.selected_term
-        )
-        if hrs > 0:
-            self.term_result_label.config(
-                text=f"معدل الترم: {gpa:.2f}% ({hrs} ساعة)"
-            )
-        else:
-            self.term_result_label.config(text="معدل الترم: -- %")
-
-    # ---------------------------------------------------------
-    # 2. معادلات الحساب (المعدل الموزون بالساعات)
-    # ---------------------------------------------------------
-    def calculate_term_gpa(self, level, term):
+    def get_term_gpa(self, level, term):
         courses = CURRICULUM.get(level, {}).get(term, [])
-        saved_scores = self.grades_data.get(level, {}).get(term, {})
-
-        total_points = 0.0
-        total_hours = 0
-
+        saved = self.grades.get(level, {}).get(term, {})
+        pts, hrs = 0.0, 0
         for c in courses:
             cname = c["name"]
             chrs = c["hours"]
-            if cname in saved_scores:
-                score = saved_scores[cname]
-                total_points += score * chrs
-                total_hours += chrs
+            if cname in saved:
+                pts += saved[cname] * chrs
+                hrs += chrs
+        return (pts / hrs) if hrs > 0 else 0.0, hrs
 
-        gpa = (total_points / total_hours) if total_hours > 0 else 0.0
-        return gpa, total_hours
+    def get_year_gpa(self, level):
+        pts, hrs = 0.0, 0
+        for t in ["الفصل الأول", "الفصل الثاني"]:
+            gpa, thrs = self.get_term_gpa(level, t)
+            pts += gpa * thrs
+            hrs += thrs
+        return (pts / hrs) if hrs > 0 else 0.0, hrs
 
-    def calculate_year_gpa(self, level):
-        total_points = 0.0
-        total_hours = 0
+    def get_overall_gpa(self):
+        pts, hrs = 0.0, 0
+        for lvl in CURRICULUM.keys():
+            gpa, yhrs = self.get_year_gpa(lvl)
+            pts += gpa * yhrs
+            hrs += yhrs
+        return (pts / hrs) if hrs > 0 else 0.0, hrs
 
-        for term in ["الفصل الأول", "الفصل الثاني"]:
-            gpa, hrs = self.calculate_term_gpa(level, term)
-            total_points += gpa * hrs
-            total_hours += hrs
 
-        year_gpa = (total_points / total_hours) if total_hours > 0 else 0.0
-        return year_gpa, total_hours
+data_mgr = DataManager()
 
-    def calculate_overall_gpa(self):
-        total_points = 0.0
-        total_hours = 0
 
-        for level in CURRICULUM.keys():
-            gpa, hrs = self.calculate_year_gpa(level)
-            total_points += gpa * hrs
-            total_hours += hrs
+# ------------------ الشاشة الأولى: المستويات ------------------
+class MainScreen(Screen):
 
-        overall_gpa = (total_points / total_hours) if total_hours > 0 else 0.0
-        return overall_gpa, total_hours
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.layout = BoxLayout(
+            orientation="vertical", padding=15, spacing=10
+        )
 
-    # ---------------------------------------------------------
-    # 3. حفظ واسترجاع البيانات باسم الشخص (JSON)
-    # ---------------------------------------------------------
-    def save_data(self):
-        name = self.name_entry.get().strip()
-        if not name:
-            messagebox.showwarning(
-                "تنبيه", "يرجى كتابة اسم الشخص أولاً لحفظ البيانات باسمه!"
+        top_box = BoxLayout(size_hint_y=0.12, spacing=5)
+        self.name_input = TextInput(
+            hint_text=ar("أدخل اسم الطالب"),
+            font_name=FONT_NAME,
+            multiline=False,
+        )
+        btn_save = Button(
+            text=ar("حفظ"),
+            font_name=FONT_NAME,
+            size_hint_x=0.25,
+            background_color=(0.1, 0.7, 0.3, 1),
+        )
+        btn_load = Button(
+            text=ar("تحميل"),
+            font_name=FONT_NAME,
+            size_hint_x=0.25,
+            background_color=(0.2, 0.5, 0.8, 1),
+        )
+
+        btn_save.bind(on_press=self.save_data)
+        btn_load.bind(on_press=self.load_data)
+
+        top_box.add_widget(self.name_input)
+        top_box.add_widget(btn_save)
+        top_box.add_widget(btn_load)
+        self.layout.add_widget(top_box)
+
+        self.layout.add_widget(
+            Label(
+                text=ar("اختر المستوى الدراسي:"),
+                font_name=FONT_NAME,
+                font_size="18sp",
+                size_hint_y=0.08,
             )
-            return
-
-        file_name = f"{name}_data.json"
-        try:
-            with open(file_name, "w", encoding="utf-8") as f:
-                json.dump(self.grades_data, f, ensure_ascii=False, indent=4)
-            messagebox.showinfo(
-                "نجاح", f"تم حفظ درجات {name} بنجاح في الملف {file_name}"
+        )
+        for lvl in CURRICULUM.keys():
+            btn = Button(
+                text=ar(lvl),
+                font_name=FONT_NAME,
+                size_hint_y=0.12,
+                font_size="16sp",
             )
-        except Exception as e:
-            messagebox.showerror("خطأ", f"تعذر حفظ الملف: {str(e)}")
+            btn.bind(on_press=lambda b, l=lvl: self.select_level(l))
+            self.layout.add_widget(btn)
 
-    def load_data(self):
-        name = self.name_entry.get().strip()
-        if not name:
-            messagebox.showwarning(
-                "تنبيه", "يرجى كتابة اسم الشخص لتحميل بياناته!"
+        self.overall_label = Label(
+            text=ar("المعدل التراكمي العام: 0.00%"),
+            font_name=FONT_NAME,
+            font_size="16sp",
+            size_hint_y=0.12,
+            color=(0.2, 0.9, 0.4, 1),
+        )
+        self.layout.add_widget(self.overall_label)
+
+        self.add_widget(self.layout)
+
+    def on_pre_enter(self):
+        gpa, hrs = data_mgr.get_overall_gpa()
+        self.overall_label.text = ar(
+            f"المعدل التراكمي لجميع السنين: {gpa:.2f}%\n(إجمالي الساعات: {hrs})"
+        )
+
+    def select_level(self, level):
+        self.manager.get_screen("term").selected_level = level
+        self.manager.current = "term"
+
+    def save_data(self, instance):
+        data_mgr.student_name = self.name_input.text.strip()
+        ok, msg = data_mgr.save_to_file()
+        Popup(
+            title=ar("تنبيه"),
+            content=Label(text=ar(msg), font_name=FONT_NAME),
+            size_hint=(0.8, 0.4),
+        ).open()
+
+    def load_data(self, instance):
+        name = self.name_input.text.strip()
+        ok, msg = data_mgr.load_from_file(name)
+        if ok:
+            self.on_pre_enter()
+        Popup(
+            title=ar("تنبيه"),
+            content=Label(text=ar(msg), font_name=FONT_NAME),
+            size_hint=(0.8, 0.4),
+        ).open()
+
+
+# ------------------ الشاشة الثانية: الفصول ------------------
+class TermScreen(Screen):
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.selected_level = "المستوى الأول"
+        self.layout = BoxLayout(
+            orientation="vertical", padding=15, spacing=15
+        )
+
+        self.title_lbl = Label(
+            text="", font_name=FONT_NAME, font_size="18sp", size_hint_y=0.15
+        )
+        self.layout.add_widget(self.title_lbl)
+
+        btn_t1 = Button(
+            text=ar("الفصل الأول"),
+            font_name=FONT_NAME,
+            size_hint_y=0.18,
+            font_size="16sp",
+        )
+        btn_t2 = Button(
+            text=ar("الفصل الثاني"),
+            font_name=FONT_NAME,
+            size_hint_y=0.18,
+            font_size="16sp",
+        )
+
+        btn_t1.bind(on_press=lambda b: self.select_term("الفصل الأول"))
+        btn_t2.bind(on_press=lambda b: self.select_term("الفصل الثاني"))
+
+        self.layout.add_widget(btn_t1)
+        self.layout.add_widget(btn_t2)
+
+        self.year_gpa_lbl = Label(
+            text=ar("معدل السنة: 0.00%"),
+            font_name=FONT_NAME,
+            font_size="16sp",
+            size_hint_y=0.15,
+            color=(0.9, 0.7, 0.2, 1),
+        )
+        self.layout.add_widget(self.year_gpa_lbl)
+
+        btn_back = Button(
+            text=ar("← رجوع للمستويات"),
+            font_name=FONT_NAME,
+            size_hint_y=0.12,
+            background_color=(0.6, 0.6, 0.6, 1),
+        )
+        btn_back.bind(on_press=lambda b: setattr(self.manager, "current", "main"))
+        self.layout.add_widget(btn_back)
+
+        self.add_widget(self.layout)
+
+    def on_pre_enter(self):
+        self.title_lbl.text = ar(f"اختر الفصل - {self.selected_level}")
+        gpa, hrs = data_mgr.get_year_gpa(self.selected_level)
+        self.year_gpa_lbl.text = ar(
+            f"معدل {self.selected_level}: {gpa:.2f}%\n(الساعات: {hrs})"
+        )
+
+    def select_term(self, term):
+        gs = self.manager.get_screen("grade")
+        gs.selected_level = self.selected_level
+        gs.selected_term = term
+        self.manager.current = "grade"
+
+
+# ------------------ الشاشة الثالثة: إدخال الدرجات ------------------
+class GradeScreen(Screen):
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.selected_level = ""
+        self.selected_term = ""
+
+        self.layout = BoxLayout(
+            orientation="vertical", padding=10, spacing=10
+        )
+        self.header_lbl = Label(
+            text="", font_name=FONT_NAME, font_size="16sp", size_hint_y=0.08
+        )
+        self.layout.add_widget(self.header_lbl)
+
+        self.scroll = ScrollView(size_hint=(1, 0.65))
+        self.grid = GridLayout(cols=1, spacing=5, size_hint_y=None)
+        self.grid.bind(minimum_height=self.grid.setter("height"))
+        self.scroll.add_widget(self.grid)
+        self.layout.add_widget(self.scroll)
+
+        self.inputs = {}
+
+        btn_calc = Button(
+            text=ar("حساب ومزامنة معدل الترم"),
+            font_name=FONT_NAME,
+            size_hint_y=0.1,
+            background_color=(0.1, 0.6, 0.9, 1),
+        )
+        btn_calc.bind(on_press=self.calculate)
+        self.layout.add_widget(btn_calc)
+
+        self.term_gpa_lbl = Label(
+            text=ar("معدل الترم: 0.00%"),
+            font_name=FONT_NAME,
+            font_size="15sp",
+            size_hint_y=0.08,
+        )
+        self.layout.add_widget(self.term_gpa_lbl)
+
+        btn_back = Button(
+            text=ar("← رجوع للفصول"),
+            font_name=FONT_NAME,
+            size_hint_y=0.09,
+            background_color=(0.6, 0.6, 0.6, 1),
+        )
+        btn_back.bind(on_press=lambda b: setattr(self.manager, "current", "term"))
+        self.layout.add_widget(btn_back)
+
+        self.add_widget(self.layout)
+
+    def on_pre_enter(self):
+        self.header_lbl.text = ar(
+            f"{self.selected_level} - {self.selected_term}"
+        )
+        self.grid.clear_widgets()
+        self.inputs = {}
+
+        courses = CURRICULUM[self.selected_level][self.selected_term]
+        saved_grades = (
+            data_mgr.grades.get(self.selected_level, {})
+            .get(self.selected_term, {})
+        )
+
+        for c in courses:
+            row = BoxLayout(size_hint_y=None, height=40, spacing=5)
+            lbl = Label(
+                text=ar(f"{c['name']} ({c['hours']}س)"),
+                font_name=FONT_NAME,
+                font_size="14sp",
+                size_hint_x=0.7,
             )
-            return
-
-        file_name = f"{name}_data.json"
-        if not os.path.exists(file_name):
-            messagebox.showerror(
-                "خطأ", f"لم يتم العثور على ملف سجلات باسم {name}"
+            inp = TextInput(
+                text=str(saved_grades.get(c["name"], "")),
+                multiline=False,
+                input_filter="float",
+                size_hint_x=0.3,
             )
-            return
 
-        try:
-            with open(file_name, "r", encoding="utf-8") as f:
-                self.grades_data = json.load(f)
-            messagebox.showinfo("نجاح", f"تم تحميل درجات {name} بنجاح!")
-            self.show_screen_1()
-        except Exception as e:
-            messagebox.showerror("خطأ", f"تعذر تحميل البيانات: {str(e)}")
+            row.add_widget(lbl)
+            row.add_widget(inp)
+            self.grid.add_widget(row)
+            self.inputs[c["name"]] = (inp, c["hours"])
+
+        self.update_label()
+
+    def calculate(self, instance):
+        term_dict = {}
+        for cname, (inp, hrs) in self.inputs.items():
+            txt = inp.text.strip()
+            if txt:
+                try:
+                    val = float(txt)
+                    if 0 <= val <= 100:
+                        term_dict[cname] = val
+                    else:
+                        Popup(
+                            title=ar("خطأ"),
+                            content=Label(
+                                text=ar(
+                                    f"الدرجة للمادة {cname} يجب أن تكون بين 0 و100"
+                                ),
+                                font_name=FONT_NAME,
+                            ),
+                            size_hint=(0.8, 0.4),
+                        ).open()
+                        return
+                except ValueError:
+                    pass
+
+        if self.selected_level not in data_mgr.grades:
+            data_mgr.grades[self.selected_level] = {}
+        data_mgr.grades[self.selected_level][self.selected_term] = term_dict
+
+        self.update_label()
+        Popup(
+            title=ar("تم الحساب"),
+            content=Label(
+                text=ar("تم الحساب وتحديث السجلات بنجاح!"),
+                font_name=FONT_NAME,
+            ),
+            size_hint=(0.8, 0.4),
+        ).open()
+
+    def update_label(self):
+        gpa, hrs = data_mgr.get_term_gpa(
+            self.selected_level, self.selected_term
+        )
+        self.term_gpa_lbl.text = ar(
+            f"معدل الترم: {gpa:.2f}% (إجمالي الساعات: {hrs})"
+        )
+
+
+# ------------------ التطبيق الرئيسي ------------------
+class GPACalculatorApp(App):
+
+    def build(self):
+        sm = ScreenManager()
+        sm.add_widget(MainScreen(name="main"))
+        sm.add_widget(TermScreen(name="term"))
+        sm.add_widget(GradeScreen(name="grade"))
+        return sm
 
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = AcademicGPACalculator(root)
-    root.mainloop()
+    GPACalculatorApp().run()
+
