@@ -1,9 +1,19 @@
 import json
 import os
-import arabic_reshaper
-from bidi.algorithm import get_display
+import sys
+
+# محاولة تحميل مكتبات تشكيل اللغة العربية
+HAS_ARABIC = False
+try:
+    import arabic_reshaper
+    from bidi.algorithm import get_display
+
+    HAS_ARABIC = True
+except ImportError:
+    HAS_ARABIC = False
 
 from kivy.app import App
+from kivy.core.text import LabelBase
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
 from kivy.uix.gridlayout import GridLayout
@@ -13,18 +23,31 @@ from kivy.uix.scrollview import ScrollView
 from kivy.uix.screenmanager import Screen, ScreenManager
 from kivy.uix.textinput import TextInput
 
-FONT_NAME = "font.ttf"
+# إعداد الخط
+FONT_NAME = "Roboto"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+FONT_PATH = os.path.join(BASE_DIR, "font.ttf")
+
+if os.path.exists(FONT_PATH):
+    try:
+        LabelBase.register(name="ArabicFont", fn_regular=FONT_PATH)
+        FONT_NAME = "ArabicFont"
+    except Exception:
+        FONT_NAME = "Roboto"
 
 
-# دالة معالجة النص العربي لمنع المربعات وتوصيل الحروف
 def ar(text):
     if not text:
         return ""
-    reshaped_text = arabic_reshaper.reshape(str(text))
-    return get_display(reshaped_text)
+    if HAS_ARABIC:
+        try:
+            reshaped_text = arabic_reshaper.reshape(str(text))
+            return get_display(reshaped_text)
+        except Exception:
+            return str(text)
+    return str(text)
 
 
-# الخطة الدراسية الكاملة - هندسة صناعية ونظم التصنيع
 CURRICULUM = {
     "المستوى الأول": {
         "الفصل الأول": [
@@ -180,7 +203,6 @@ class DataManager:
 data_mgr = DataManager()
 
 
-# ------------------ الشاشة الأولى: المستويات ------------------
 class MainScreen(Screen):
 
     def __init__(self, **kwargs):
@@ -276,7 +298,6 @@ class MainScreen(Screen):
         ).open()
 
 
-# ------------------ الشاشة الثانية: الفصول ------------------
 class TermScreen(Screen):
 
     def __init__(self, **kwargs):
@@ -344,7 +365,6 @@ class TermScreen(Screen):
         self.manager.current = "grade"
 
 
-# ------------------ الشاشة الثالثة: إدخال الدرجات ------------------
 class GradeScreen(Screen):
 
     def __init__(self, **kwargs):
@@ -478,7 +498,6 @@ class GradeScreen(Screen):
         )
 
 
-# ------------------ التطبيق الرئيسي ------------------
 class GPACalculatorApp(App):
 
     def build(self):
@@ -491,4 +510,3 @@ class GPACalculatorApp(App):
 
 if __name__ == "__main__":
     GPACalculatorApp().run()
-
