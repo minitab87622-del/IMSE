@@ -14,6 +14,7 @@ except ImportError:
 
 from kivy.app import App
 from kivy.core.text import LabelBase
+from kivy.graphics import Rectangle
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
 from kivy.uix.gridlayout import GridLayout
@@ -23,11 +24,14 @@ from kivy.uix.scrollview import ScrollView
 from kivy.uix.screenmanager import Screen, ScreenManager
 from kivy.uix.textinput import TextInput
 
-# إعداد الخط
-FONT_NAME = "Roboto"
+# تحديد المسارات الأساسية للملفات
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FONT_PATH = os.path.join(BASE_DIR, "font.ttf")
+BG_PATH = os.path.join(BASE_DIR, "background.png")
+ICON_PATH = os.path.join(BASE_DIR, "icon.png")
 
+# إعداد وتسجيل الخط العربي
+FONT_NAME = "Roboto"
 if os.path.exists(FONT_PATH):
     try:
         LabelBase.register(name="ArabicFont", fn_regular=FONT_PATH)
@@ -46,6 +50,24 @@ def ar(text):
         except Exception:
             return str(text)
     return str(text)
+
+
+# شاشة أساسية تعتمد صورة الخلفية background.png تلقائياً
+class BaseScreen(Screen):
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        with self.canvas.before:
+            if os.path.exists(BG_PATH):
+                self.bg_rect = Rectangle(
+                    source=BG_PATH, pos=self.pos, size=self.size
+                )
+                self.bind(pos=self._update_bg, size=self._update_bg)
+
+    def _update_bg(self, instance, value):
+        if hasattr(self, "bg_rect"):
+            self.bg_rect.pos = self.pos
+            self.bg_rect.size = self.size
 
 
 CURRICULUM = {
@@ -203,7 +225,7 @@ class DataManager:
 data_mgr = DataManager()
 
 
-class MainScreen(Screen):
+class MainScreen(BaseScreen):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -298,7 +320,7 @@ class MainScreen(Screen):
         ).open()
 
 
-class TermScreen(Screen):
+class TermScreen(BaseScreen):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -365,7 +387,7 @@ class TermScreen(Screen):
         self.manager.current = "grade"
 
 
-class GradeScreen(Screen):
+class GradeScreen(BaseScreen):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -439,6 +461,7 @@ class GradeScreen(Screen):
             )
             inp = TextInput(
                 text=str(saved_grades.get(c["name"], "")),
+                font_name=FONT_NAME,
                 multiline=False,
                 input_filter="float",
                 size_hint_x=0.3,
@@ -501,6 +524,10 @@ class GradeScreen(Screen):
 class GPACalculatorApp(App):
 
     def build(self):
+        # ربط الأيقونة
+        if os.path.exists(ICON_PATH):
+            self.icon = ICON_PATH
+
         sm = ScreenManager()
         sm.add_widget(MainScreen(name="main"))
         sm.add_widget(TermScreen(name="term"))
