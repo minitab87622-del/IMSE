@@ -1,40 +1,55 @@
 [app]
 
 # (str) Title of your application
-title = Industrial GPA Calculator
+title = Hisab AlHimayat
 
 # (str) Package name
-package.name = gpacalculator
+package.name = hisabalhimayat
 
-# (str) Package domain
-package.domain = org.industrial.app
+# (str) Package domain (needed for android/ios packaging)
+package.domain = org.app
 
-# (str) Source code where the main.py lives
+# (str) Source code where the main.py live
 source.dir = .
 
-# (list) Source files to include (شملنا ملفات الخطوط ttf)
-source.include_exts = py,png,jpg,kv,atlas,json,ttf
+# (list) Source files to include (تمت إضافة ttf لحزم ملف الخط font.ttf والصور)
+source.include_exts = py,png,jpg,kv,atlas,ttf
 
 # (str) Application versioning
-version = 1.0
+version = 0.1
 
-# (list) Application requirements (تمت إضافة مكتبات اللغة العربية)
+# (list) Application requirements
+# تشمل كيفي ومكتبات معالجة النص العربي إن وجدت
 requirements = python3,kivy,arabic_reshaper,python-bidi
 
-# (str) Custom source code for requirements
+# (str) Icon of the application (ملف الأيقونة)
 icon.filename = %(source.dir)s/icon.png
 
-# (str) Presplash of the application
-presplash.filename = %(source.dir)s/presplash.png
+# (str) Presplash of the application (ملف الخلفية عند فتح التطبيق)
+presplash.filename = %(source.dir)s/background.png
 
-# (str) Supported orientation
+# (list) Supported orientations
 orientation = portrait
 
 # (bool) Indicate if the application should be fullscreen or not
 fullscreen = 0
 
+#
+# Android specific
+#
+
+[buildozer]
+
+# (int) Log level (0 = error only, 1 = info, 2 = debug)
+log_level = 2
+
+# (int) Display warning if buildozer is run as root
+warn_on_root = 1
+
+[app:android]
+
 # (list) Permissions
-android.permissions = WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE
+android.permissions = INTERNET, READ_EXTERNAL_STORAGE, WRITE_EXTERNAL_STORAGE
 
 # (int) Target Android API
 android.api = 33
@@ -42,16 +57,8 @@ android.api = 33
 # (int) Minimum API required
 android.minapi = 21
 
-# (list) List of Android architectures to build for
-android.archs = arm64-v8a, armeabi-v7a
+# (bool) Accept SDK license automatically (ضروري جداً لبيئة كولاب لتجنب التوقف)
+android.accept_sdk_license = True
 
-# (bool) Enable AndroidX support
-android.enable_androidx = True
-
-[buildozer]
-
-# (int) Log level
-log_level = 2
-
-# (int) Display warning if buildozer is run as root
-warn_on_root = 1
+# (str) The Android arch to build for
+android.archs = arm64-v8a
